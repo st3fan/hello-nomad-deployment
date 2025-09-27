@@ -62,5 +62,5 @@ jobs:
         NOMAD_TOKEN: ${{ secrets.NOMAD_TOKEN }}
       run: |
         #nomad job plan hello-nomad.nomad
-        nomad job run hello-nomad.nomad
+        nomad job run -var="git_version=${{ github.event.release.tag_name }}" -var="git_commit=${{ github.sha }}" hello-nomad.nomad
         nomad job status hello-nomad

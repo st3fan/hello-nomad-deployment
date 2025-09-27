@@ -1,8 +1,30 @@
+variable "git_version" {
+  description = "Git Version"
+  type        = string
+  default     = "unknown"
+}
+
+variable "git_commit" {
+  description = "Git Commit"
+  type        = string
+  default     = "unknown"
+}
+
 job "hello-nomad" {
   datacenters = ["dc1"]
   type        = "service"
 
+  meta {
+    git_version = var.git_version
+    git_commit = var.git_commit
+  }
+
   group "web" {
+    tag {
+      git_version = var.git_version
+      git_commit = var.git_commit
+    }
+
     count = 2
 
     network {
@@ -33,7 +55,7 @@ job "hello-nomad" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/st3fan/hello-nomad-deployment:latest"
+        image = "ghcr.io/st3fan/hello-nomad-deployment:${var.git_version}"
         ports = ["http"]
       }
 
