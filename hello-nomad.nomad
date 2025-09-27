@@ -20,10 +20,10 @@ job "hello-nomad" {
   }
 
   group "web" {
-    tag {
-      git_version = var.git_version
-      git_commit = var.git_commit
-    }
+#    tag {
+#      git_version = var.git_version
+#      git_commit = var.git_commit
+#    }
 
     count = 2
 
