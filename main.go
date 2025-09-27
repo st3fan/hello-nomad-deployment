@@ -8,7 +8,7 @@ import (
 )
 
 func helloHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w, "Hello, Nomad!")
+	fmt.Fprint(w, "Hello, Nomad?")
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
