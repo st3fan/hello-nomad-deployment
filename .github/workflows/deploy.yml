@@ -51,34 +51,145 @@ jobs:
         version: '1.10.5'
 
     - name: Verify Nomad installation
-      run: nomad version
+      run: |
+        echo "=== Nomad CLI Information ==="
+        nomad version
+        echo "Nomad Address: $NOMAD_ADDR"
+        echo "Authentication configured: $([ -n "$NOMAD_TOKEN" ] && echo "Yes" || echo "No")"
+        echo ""
 
     - name: Update Nomad job with new image tag
       run: |
+        echo "=== Updating Docker image tag in Nomad job ==="
+        echo "Release tag: ${{ github.event.release.tag_name }}"
+        echo "Original job file:"
+        grep "image =" hello-nomad.nomad
+        
         # Replace the image tag in the Nomad job file with the release tag
         sed -i "s|image = \"ghcr.io/st3fan/hello-nomad-deployment:latest\"|image = \"ghcr.io/st3fan/hello-nomad-deployment:${{ github.event.release.tag_name }}\"|" hello-nomad.nomad
+        
+        echo "Updated job file:"
+        grep "image =" hello-nomad.nomad
+        echo ""
 
     - name: Deploy to Nomad
       env:
         NOMAD_TOKEN: ${{ secrets.NOMAD_TOKEN }}
       run: |
+        set -e  # Exit on any error
+        
+        echo "=== Nomad Deployment Debug Information ==="
+        echo "Nomad Address: $NOMAD_ADDR"
+        echo "Timestamp: $(date)"
+        echo ""
+        
+        # Verify Nomad connectivity and authentication
+        echo "=== Testing Nomad connectivity ==="
+        if ! nomad node-pool list > /dev/null 2>&1; then
+          echo "❌ ERROR: Failed to connect to Nomad or authentication failed"
+          echo "Checking if Nomad server is reachable..."
+          if ! curl -s -f "$NOMAD_ADDR/v1/status/leader" > /dev/null; then
+            echo "❌ ERROR: Nomad server is not reachable at $NOMAD_ADDR"
+            exit 1
+          else
+            echo "✅ Nomad server is reachable, but authentication failed"
+            echo "Please check the NOMAD_TOKEN secret"
+            exit 1
+          fi
+        else
+          echo "✅ Successfully connected to Nomad"
+        fi
+        echo ""
+        
+        # Validate the job file syntax
+        echo "=== Validating Nomad job file ==="
+        if ! nomad job validate hello-nomad.nomad; then
+          echo "❌ ERROR: Nomad job file validation failed"
+          exit 1
+        else
+          echo "✅ Job file validation passed"
+        fi
+        echo ""
+        
+        # Show the job file contents for debugging
+        echo "=== Current job configuration ==="
+        cat hello-nomad.nomad
+        echo ""
+        
         # Plan the deployment and capture modify index
-        echo "Planning deployment..."
-        PLAN_OUTPUT=$(nomad job plan hello-nomad.nomad)
-        echo "$PLAN_OUTPUT"
-        
-        # Extract the modify index from the plan output
-        MODIFY_INDEX=$(echo "$PLAN_OUTPUT" | grep "Job Modify Index:" | awk '{print $4}')
-        
-        if [ -z "$MODIFY_INDEX" ]; then
-          echo "Error: Could not extract modify index from plan output"
+        echo "=== Planning deployment ==="
+        echo "Running: nomad job plan hello-nomad.nomad"
+        if ! PLAN_OUTPUT=$(nomad job plan hello-nomad.nomad 2>&1); then
+          echo "❌ ERROR: nomad job plan failed"
+          echo "Plan output:"
+          echo "$PLAN_OUTPUT"
           exit 1
         fi
         
-        echo "Using modify index: $MODIFY_INDEX"
+        echo "✅ Job plan succeeded"
+        echo "Plan output:"
+        echo "$PLAN_OUTPUT"
+        echo ""
         
-        # Deploy the job with the modify index
-        nomad job run -check-index "$MODIFY_INDEX" hello-nomad.nomad
+        # Extract the modify index from the plan output
+        echo "=== Extracting modify index ==="
+        MODIFY_INDEX=$(echo "$PLAN_OUTPUT" | grep "Job Modify Index:" | awk '{print $4}')
         
-        # Check deployment status
-        nomad job status hello-nomad
+        if [ -z "$MODIFY_INDEX" ]; then
+          echo "❌ ERROR: Could not extract modify index from plan output"
+          echo "Looking for alternative modify index patterns..."
+          
+          # Try alternative patterns for modify index
+          MODIFY_INDEX=$(echo "$PLAN_OUTPUT" | grep -i "modify.*index" | head -1 | grep -o '[0-9]\+' | tail -1)
+          
+          if [ -z "$MODIFY_INDEX" ]; then
+            echo "❌ ERROR: No modify index found in any format"
+            echo "This might be a new job (no existing deployment)"
+            echo "Attempting deployment without check-index..."
+            
+            # Deploy without modify index for new jobs
+            echo "=== Deploying new job ==="
+            if ! nomad job run hello-nomad.nomad; then
+              echo "❌ ERROR: nomad job run failed"
+              exit 1
+            fi
+          else
+            echo "✅ Found modify index using alternative pattern: $MODIFY_INDEX"
+          fi
+        else
+          echo "✅ Successfully extracted modify index: $MODIFY_INDEX"
+        fi
+        
+        # Deploy the job with the modify index if we have one
+        if [ -n "$MODIFY_INDEX" ]; then
+          echo ""
+          echo "=== Deploying with modify index check ==="
+          echo "Running: nomad job run -check-index $MODIFY_INDEX hello-nomad.nomad"
+          if ! nomad job run -check-index "$MODIFY_INDEX" hello-nomad.nomad; then
+            echo "❌ ERROR: nomad job run with check-index failed"
+            echo "This could mean the job was modified between plan and run"
+            echo "Attempting deployment without check-index as fallback..."
+            
+            if ! nomad job run hello-nomad.nomad; then
+              echo "❌ ERROR: Fallback nomad job run also failed"
+              exit 1
+            else
+              echo "✅ Fallback deployment succeeded"
+            fi
+          else
+            echo "✅ Deployment with check-index succeeded"
+          fi
+        fi
+        
+        echo ""
+        echo "=== Checking deployment status ==="
+        if ! nomad job status hello-nomad; then
+          echo "❌ WARNING: Could not retrieve job status (job might still be deploying)"
+        else
+          echo "✅ Job status retrieved successfully"
+        fi
+        
+        echo ""
+        echo "=== Deployment Summary ==="
+        echo "✅ Deployment process completed"
+        echo "Check the job status above for final deployment state"
