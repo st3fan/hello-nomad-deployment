@@ -62,6 +62,6 @@ jobs:
       env:
         NOMAD_TOKEN: ${{ secrets.NOMAD_TOKEN }}
       run: |
-        nomad job plan hello-nomad.nomad)
+        nomad job plan hello-nomad.nomad
         nomad job run -check-index 0 hello-nomad.nomad
         nomad job status hello-nomad
