@@ -46,7 +46,7 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
 
     - name: Setup Nomad CLI
-      uses: hashicorp/setup-nomad@v2
+      uses: hashicorp/setup-nomad@v1
       with:
         version: '1.10.5'
 
