@@ -14,6 +14,7 @@ job "hello-nomad" {
     service {
       name = "hello-nomad"
       port = "http"
+      provider = "nomad"
 
       tags = [
         "http",
