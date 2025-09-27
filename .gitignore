@@ -8,6 +8,9 @@
 *.so
 *.dylib
 
+# Go binary
+hello-nomad
+
 # Test binary, built with `go test -c`
 *.test
 

@@ -1,0 +1,71 @@
+name: Deploy to Nomad
+
+on:
+  release:
+    types: [created]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  NOMAD_ADDR: https://nomad.sateh.com
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=tag
+          type=raw,value=latest
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+
+    - name: Install Nomad CLI
+      run: |
+        curl -fsSL https://releases.hashicorp.com/nomad/1.10.5/nomad_1.10.5_linux_amd64.zip -o nomad.zip
+        unzip nomad.zip
+        sudo mv nomad /usr/local/bin/
+        nomad version
+
+    - name: Update Nomad job with new image tag
+      run: |
+        # Replace the image tag in the Nomad job file with the release tag
+        sed -i "s|image = \"ghcr.io/st3fan/hello-nomad-deployment:latest\"|image = \"ghcr.io/st3fan/hello-nomad-deployment:${{ github.event.release.tag_name }}\"|" hello-nomad.nomad
+
+    - name: Deploy to Nomad
+      env:
+        NOMAD_TOKEN: ${{ secrets.NOMAD_TOKEN }}
+      run: |
+        # Plan the deployment
+        nomad job plan hello-nomad.nomad
+        
+        # Deploy the job
+        nomad job run hello-nomad.nomad
+        
+        # Check deployment status
+        nomad job status hello-nomad
