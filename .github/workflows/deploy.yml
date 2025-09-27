@@ -61,11 +61,23 @@ jobs:
       env:
         NOMAD_TOKEN: ${{ secrets.NOMAD_TOKEN }}
       run: |
-        # Plan the deployment
-        nomad job plan hello-nomad.nomad
+        # Plan the deployment and capture modify index
+        echo "Planning deployment..."
+        PLAN_OUTPUT=$(nomad job plan hello-nomad.nomad)
+        echo "$PLAN_OUTPUT"
         
-        # Deploy the job
-        nomad job run hello-nomad.nomad
+        # Extract the modify index from the plan output
+        MODIFY_INDEX=$(echo "$PLAN_OUTPUT" | grep "Job Modify Index:" | awk '{print $4}')
+        
+        if [ -z "$MODIFY_INDEX" ]; then
+          echo "Error: Could not extract modify index from plan output"
+          exit 1
+        fi
+        
+        echo "Using modify index: $MODIFY_INDEX"
+        
+        # Deploy the job with the modify index
+        nomad job run -check-index "$MODIFY_INDEX" hello-nomad.nomad
         
         # Check deployment status
         nomad job status hello-nomad
