@@ -20,11 +20,6 @@ job "hello-nomad" {
   }
 
   group "web" {
-#    tag {
-#      git_version = var.git_version
-#      git_commit = var.git_commit
-#    }
-
     count = 2
 
     network {
@@ -39,8 +34,9 @@ job "hello-nomad" {
       provider = "nomad"
 
       tags = [
-        "http",
-        "web",
+        "traefik.enable=true",
+        "traefik.http.routers.webapp.rule=Host(`hello-nomad.sateh.systems`)",
+        "traefik.http.routers.webapp.entrypoints=web",
       ]
 
       check {
