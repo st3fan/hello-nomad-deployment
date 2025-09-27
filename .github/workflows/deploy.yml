@@ -7,7 +7,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  NOMAD_ADDR: https://nomad.sateh.com
+  NOMAD_ADDR: ${{ secrets.NOMAD_ADDR }}
 
 jobs:
   build-and-deploy:
